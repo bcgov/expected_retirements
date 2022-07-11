@@ -2,8 +2,7 @@
 title: "Expected Retirement"
 output:
   flexdashboard::flex_dashboard:
-    orientation: rows
-    source_code: github
+    source_code: https://github.com/bcgov/expected_retirements
 runtime: shiny
 resource_files:
 - processed_data/bc_pop.rds
@@ -23,7 +22,8 @@ reported <- read_rds(here::here("processed_data", "retirements.rds"))
 participation <- read_rds(here::here("processed_data", "participation.rds"))
 ```
 
-# Introduction
+Introduction
+=====================================  
 
 -   This app predicts British Columbia "retirement" numbers based on demographic data and projections. 
 -   The definition of retirement is broad: permanent exit from the labour market, whether above or below ground.
@@ -63,12 +63,13 @@ knitr::kable(t(tbbl))%>%
 
 -   The expected number of female retirements in a year is $\sum^{a=60}_{a=55}p_a \times w_{af}=32,000$ where $p_a$ is the probability of retirement at age $a$ and $w_{af}$ is the number of female workers of age $a$.
 
+The age pyramid {data-orientation=rows}
+=====================================     
+   
+Row {data-height=900}
+-------------------------------------
 
-# The age pyramid
-
-## Row {data-height="900"}
-
-### 
+### The age pyramid illustrates the number of people of each age/sex combination in B.C. Horizontal grey lines indicate the years where retirement risk is positive.
 
 ```{r}
 plotly::renderPlotly({
@@ -76,38 +77,75 @@ plotly::renderPlotly({
   geom_hline(data=retire_distribution(), aes(yintercept = age), alpha=.1)+
   geom_point(data = bc_pop, 
        mapping = aes(x = ifelse(sex == "Males", -value, value), 
-                     y = age_group, fill = sex, frame=ref_date))+
+                     y = age_group, 
+                     fill = sex, 
+                     frame=ref_date,
+                     text=paste(
+                       "In",
+                       ref_date,
+                       "the number of",
+                       sex,
+                       "of age",
+                       age_group, 
+                       if_else(ref_date<2022,"was","is expected to be"),
+                       scales::comma(value)
+                     )))+
   lemon::scale_x_symmetric(labels = abs) +
   labs(title = "B.C. Population by age, sex and year",
        x="",
        y="Age")
-  plotly::ggplotly(age_pyramid, tooltip = NULL)%>%
+  plotly::ggplotly(age_pyramid, tooltip = "text")%>%
     plotly::animation_opts(transition = 0)
 })
 ```
 
-## Row {data-height="100"}
+Row {data-height=100}
+-------------------------------------
 
-### 
+###
 
--   Historical data from Statistics Canada table 17-10-0005-01 and projections from <https://bcstats.shinyapps.io/popApp/>
-- grey horizontal lines represent the retirement filter.
+-   Historical data from Statistics Canada table 17-10-0005-01 and projections from https://bcstats.shinyapps.io/popApp/
 
-# Labour Force Participation Rates:
+Labour Force Participation Rates {data-orientation=rows}
+=====================================     
+   
+Row {data-height=900}
+-------------------------------------
 
-### 
+### The Labour Force Participation Rates give the proportion of the population that is at risk of retirement.
 
 ```{r}
-plt <- ggplot(participation,aes(Date,`Participation Rate`,colour=Sex))+
+plt <- ggplot(participation,aes(Date,
+                                `Participation Rate`,
+                                colour=Sex,
+                                group=Sex,
+                                text=paste(
+                                "The labour force participation rate for \n",
+                                str_to_lower(Sex),
+                                "in",
+                                tsibble::yearmonth(Date),
+                                "was",
+                                `Participation Rate`
+                                )))+
   geom_line(alpha=.25,lwd=.25)+
   geom_smooth(se=FALSE, lwd=.5)+
   labs(title="Labour Force Participation Rate: ages 50-54")
-plotly::ggplotly(plt)
+plotly::ggplotly(plt, tooltip = "text")
 ```
 
-# The app:
+Row {data-height=100}
+-------------------------------------
 
-## Inputs {.sidebar}
+###
+
+-   Historical data from Statistics Canada table 14-10-0017-01.
+
+The app {data-orientation=columns}
+=====================================  
+
+Inputs {.sidebar}
+-------------------------------------
+
 
 ```{r}
 sliderInput("male_part_rate", "Male 50-54 labour force participation rate?",
@@ -176,26 +214,47 @@ full_join(estimated, reported)%>%
 
 ```
 
-## Row {data-height="900"}
+Column
+--------------------------------------
 
 ### 
 
 ```{r}
-renderPlot({
-ggplot(retire_distribution(), aes(x=factor(age), y=retire_at_age))+
+plotly::renderPlotly({
+plt <- ggplot(retire_distribution(), aes(x=factor(age),
+                                         y=retire_at_age,
+                                         text=paste(
+                                          scales::percent(retire_at_age,accuracy=.01), 
+                                         "of people retire at",
+                                         age
+                                         )))+
   geom_col()+
   scale_y_continuous(label=scales::percent, limits=c(0,1))+
   labs(title="Resulting distribution of retirement age",
     x="Age",
        y="Retire at age")
+plotly::ggplotly(plt, tooltip = "text")
 })
 ```
 
-### 
+Column {.tabset}
+--------------------------------------
+
+### Plots 
 
 ```{r}
-renderPlot({
-ggplot(both(), aes(ref_date, value, colour=name))+
+plotly::renderPlotly({
+plt <- ggplot(both(), aes(ref_date, 
+                          value, 
+                          colour=name,
+                          group=sex,
+                          text=paste(
+                            "The",
+                            name,
+                            "\n in",
+                            ref_date,
+                            "is",
+                            scales::comma(value, accuracy=1))))+
   geom_line()+
   scale_y_continuous(labels=scales::comma, limits = c(0,40000))+
   labs(title="Reported vs. Estimated retirements",
@@ -204,17 +263,43 @@ ggplot(both(), aes(ref_date, value, colour=name))+
     y="")+
   facet_wrap(~sex)+
   theme(legend.position = "bottom")
+
+ plotly::ggplotly(plt, tooltip = "text")  %>%
+  layout(legend = list(
+      orientation = "h"
+    )
+  )
 })
 ```
 
-## Row {data-height="200"}
+### Data
 
-### 
+```{r}
+DT::renderDataTable(server = FALSE, {
+   both() %>%
+    DT::datatable(
+      extensions = "Buttons",
+      rownames = FALSE,
+      options = list(
+        columnDefs = list(list(className = "dt-center", targets = "_all")),
+        paging = TRUE,
+        scrollX = TRUE,
+        scrollY = TRUE,
+        searching = TRUE,
+        ordering = TRUE,
+        dom = "Btip",
+        buttons = list(
+          list(extend = "csv", filename = input$name),
+          list(extend = "excel", filename = input$name)
+        ),
+        pageLength = 10,
+        lengthMenu = c(3, 5)
+      )
+    )
+})
+```
 
--   Reported retirements from Statistics Canada table 14-10-0126-01, population data from Statistics Canada table 17-10-0005-01 and projections from <https://bcstats.shinyapps.io/popApp/>
 
--   Things to try:
-  1) Simulate a policy intervention where the government imposes a minimum retirement age of 66 (set the hazard rate to zero for 65 and younger). What impact does this have on the expected retirements curves?
 
 # References
 
