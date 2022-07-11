@@ -1,0 +1,226 @@
+---
+title: "Expected Retirement"
+output:
+  flexdashboard::flex_dashboard:
+    orientation: rows
+    source_code: github
+runtime: shiny
+resource_files:
+- processed_data/bc_pop.rds
+- processed_data/retirements.rds
+- processed_data/participation.rds
+bibliography: references.yaml
+---
+
+```{r}
+library(tidyverse)
+library(plotly)
+hazard_final <- 1
+bc_pop <- read_rds(here::here("processed_data","bc_pop.rds"))%>%
+  mutate(ref_date=as.numeric(ref_date))%>%
+  filter(age_group<72)
+reported <- read_rds(here::here("processed_data", "retirements.rds"))
+participation <- read_rds(here::here("processed_data", "participation.rds"))
+```
+
+# Introduction
+
+-   This app predicts British Columbia "retirement" numbers based on demographic data and projections. 
+-   The definition of retirement is broad: permanent exit from the labour market, whether above or below ground.
+-   The main driver of retirements is the number $n_{as}$ of individuals of each age/sex combination.
+-   For the app the user specifies:
+    1)  the labour force participation rate $r_s$ which determines the number of workers at risk of retirement: $w_{as}=n_{as} \times r_s$.
+    2)  the hazard rate $h_a$ for various age groups between 55 and 70: the annual risk of becoming retired given you have not yet retired.
+-   The hazard rates can be used to determine the probability distribution for retirement ages: $p_a$ (simple example below)
+
+#### Assumptions
+
+-   Demographic data (historic and forecasts) are accurate.
+-   All retirements occur between the ages of 55 and 71.
+-   Labour force participation rates for those approaching retirement will stay around .9 for males and .8 for females. 
+-   The annual risk of retirement is similar to those in the USA in the early 2000's [@johnson2008].
+
+#### A simple example
+
+-   Suppose that demographics are unchanging: there are 40,000 females of each age in B.C.
+-   Further, suppose that the labour force participation rate is $r_f=.8$ for females approaching retirement age.
+-   This implies 32,000 females of each age are at risk of retirement.
+-   Suppose the risk of retirement is $h_a=0$ for those age 0-54 and $h_a=.5$ for those age 55-59.
+-   i.e. assuming you have not retired yet and you are between 55 and 59 years old there is a 50/50 chance that you will retire this year.
+-   At age 60 all remaining workers retire.
+
+```{r}
+tbbl <- tibble(age=55:60, 
+               population=rep(40000,6),
+               `at risk for retirement: $w_{af}=.8 \\times 40,000$`=rep(32000,6),
+              `not yet retired (at start of year)`=c(32000*c(.5^(0:5))),
+               `retirements (50% of not yet retired)`=c(32000*c(.5^(1:5),1-sum(.5^(1:5)))))%>%
+  mutate(`probability of retirement: $p_a$`=`retirements (50% of not yet retired)`/32000)%>%
+  mutate_all(scales::comma)
+knitr::kable(t(tbbl))%>%
+  kableExtra::kable_styling(full_width = F)
+```
+
+-   The expected number of female retirements in a year is $\sum^{a=60}_{a=55}p_a \times w_{af}=32,000$ where $p_a$ is the probability of retirement at age $a$ and $w_{af}$ is the number of female workers of age $a$.
+
+
+# The age pyramid
+
+## Row {data-height="900"}
+
+### 
+
+```{r}
+plotly::renderPlotly({
+  age_pyramid <- ggplot()+
+  geom_hline(data=retire_distribution(), aes(yintercept = age), alpha=.1)+
+  geom_point(data = bc_pop, 
+       mapping = aes(x = ifelse(sex == "Males", -value, value), 
+                     y = age_group, fill = sex, frame=ref_date))+
+  lemon::scale_x_symmetric(labels = abs) +
+  labs(title = "B.C. Population by age, sex and year",
+       x="",
+       y="Age")
+  plotly::ggplotly(age_pyramid, tooltip = NULL)%>%
+    plotly::animation_opts(transition = 0)
+})
+```
+
+## Row {data-height="100"}
+
+### 
+
+-   Historical data from Statistics Canada table 17-10-0005-01 and projections from <https://bcstats.shinyapps.io/popApp/>
+- grey horizontal lines represent the retirement filter.
+
+# Labour Force Participation Rates:
+
+### 
+
+```{r}
+plt <- ggplot(participation,aes(Date,`Participation Rate`,colour=Sex))+
+  geom_line(alpha=.25,lwd=.25)+
+  geom_smooth(se=FALSE, lwd=.5)+
+  labs(title="Labour Force Participation Rate: ages 50-54")
+plotly::ggplotly(plt)
+```
+
+# The app:
+
+## Inputs {.sidebar}
+
+```{r}
+sliderInput("male_part_rate", "Male 50-54 labour force participation rate?",
+                  min = .5, max = 1,
+                  value = .9)
+sliderInput("female_part_rate", "Female 50-54 labour force participation rate?",
+                  min = .5, max = 1,
+                  value = .8)
+sliderInput("hazard_55_57", "Hazard rate age 55-57?",
+                  min = 0, max = 1,
+                  value = .02)
+sliderInput("hazard_58_60", "Hazard rate age 58-60?",
+                  min = 0, max = 1,
+                  value = .05)
+sliderInput("hazard_61_64", "Hazard rate age 61-64?",
+                  min = 0, max = 1,
+                  value = .15)
+sliderInput("hazard_65", "Hazard rate at age 65?",
+                  min = 0, max = 1,
+                  value = .22)
+sliderInput("hazard_66_70", "Hazard rate age 66-70?",
+                  min = 0, max = 1,
+                  value = .15)
+```
+
+```{r}
+retire_distribution <- reactive({
+  age <-55:71
+  hazard_rate <- c(rep(input$hazard_55_57, 3),
+                   rep(input$hazard_58_60, 3),
+                   rep(input$hazard_61_64, 4),
+                   input$hazard_65, 
+                   rep(input$hazard_66_70,5), 
+                   hazard_final)
+   tbbl <- tibble(age, hazard_rate)%>%
+    mutate(still_working_at_start=lag(cumprod(1-hazard_rate)))
+ tbbl$still_working_at_start[1] <- 1
+ tbbl <-tbbl%>%
+   mutate(retire_at_age=hazard_rate*still_working_at_start)
+})
+
+both <- reactive({
+  estimated <- bc_pop%>%
+  filter(age_group %in% 55:71)%>%
+    group_by(ref_date, sex)%>%
+    mutate(`population based estimate` = if_else(sex=="Males",
+                                      value*input$male_part_rate,
+                                      value*input$female_part_rate))%>%
+    select(-value)
+
+  weights <-retire_distribution()%>%
+    select(age_group=age, retire_at_age)
+
+  estimated <- full_join(estimated, weights)%>%
+    mutate(`population based estimate`=`population based estimate`*retire_at_age)%>%
+    group_by(ref_date, sex)%>%
+    summarize(`population based estimate`=sum(`population based estimate`))
+
+reported <- reported%>%
+  select(ref_date,`reported retirements`=val_norm, sex)%>%
+  mutate(ref_date=as.numeric(ref_date))
+
+full_join(estimated, reported)%>%
+  pivot_longer(cols=c("population based estimate","reported retirements"), names_to = "name", values_to = "value")
+})
+
+```
+
+## Row {data-height="900"}
+
+### 
+
+```{r}
+renderPlot({
+ggplot(retire_distribution(), aes(x=factor(age), y=retire_at_age))+
+  geom_col()+
+  scale_y_continuous(label=scales::percent, limits=c(0,1))+
+  labs(title="Resulting distribution of retirement age",
+    x="Age",
+       y="Retire at age")
+})
+```
+
+### 
+
+```{r}
+renderPlot({
+ggplot(both(), aes(ref_date, value, colour=name))+
+  geom_line()+
+  scale_y_continuous(labels=scales::comma, limits = c(0,40000))+
+  labs(title="Reported vs. Estimated retirements",
+    colour="",
+    x="",
+    y="")+
+  facet_wrap(~sex)+
+  theme(legend.position = "bottom")
+})
+```
+
+## Row {data-height="200"}
+
+### 
+
+-   Reported retirements from Statistics Canada table 14-10-0126-01, population data from Statistics Canada table 17-10-0005-01 and projections from <https://bcstats.shinyapps.io/popApp/>
+
+-   Things to try:
+  1) Simulate a policy intervention where the government imposes a minimum retirement age of 66 (set the hazard rate to zero for 65 and younger). What impact does this have on the expected retirements curves?
+
+# References
+
+::: {#refs}
+:::
+
+# Appendix
+
+![Estimate hazard rates from[@johnson2008]](background/hazard.png)
