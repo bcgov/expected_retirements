@@ -21,6 +21,28 @@ bc_pop <- read_rds(here::here("processed_data","bc_pop.rds"))%>%
   filter(age_group<72)
 reported <- read_rds(here::here("processed_data", "retirements.rds"))
 participation <- read_rds(here::here("processed_data", "participation.rds"))
+compare_plot <- function(tbbl, ylim){
+    ggplot(tbbl, aes(ref_date, 
+                          value, 
+                          colour=name,
+                          group=sex,
+                          text=paste(
+                            "The",
+                            name,
+                            "\n in",
+                            ref_date,
+                            "is",
+                            scales::comma(value, accuracy=1))))+
+  geom_line()+
+  scale_y_continuous(labels=scales::comma, limits = c(0,ylim))+
+  labs(title="Reported vs. Estimated retirements",
+    colour="",
+    x="",
+    y="")+
+  facet_wrap(~sex)+
+  theme(legend.position = "bottom")+
+      scale_colour_brewer(palette = "Dark2")
+ }
 ```
 
 Introduction
@@ -62,7 +84,8 @@ knitr::kable(t(tbbl))%>%
   kableExtra::kable_styling(full_width = F)
 ```
 
--   The expected number of female retirements in a year is $\sum^{a=60}_{a=55}p_a \times w_{af}=32,000$.
+-   The expected number of retirements is a weighted average: $\sum^{a=60}_{a=55}p_a \times w_{af}=32,000$.
+
 
 Inputs {data-orientation=rows}
 =====================================     
@@ -70,12 +93,12 @@ Inputs {data-orientation=rows}
 Row {data-height=900}
 -------------------------------------
 
-### The age pyramid illustrates the number of people of each age/sex combination in B.C. Horizontal grey lines indicate the retirement years.
+### The age pyramid illustrates the number of people of each age/sex combination in B.C. Horizontal grey band indicates retirement years.
 
 ```{r}
 plotly::renderPlotly({
   age_pyramid <- ggplot()+
-  geom_hline(data=retire_distribution(), aes(yintercept = age), alpha=.1)+
+  geom_hline(data=retire_distribution(), aes(yintercept = age), alpha=.25, colour="gray60", lwd=2)+
   geom_point(data = bc_pop, 
        mapping = aes(x = ifelse(sex == "Males", -value, value), 
                      y = age_group, 
@@ -218,12 +241,18 @@ both <- reactive({
   estimated <- full_join(estimated, weights)%>%
     mutate(`population based estimate`=`population based estimate`*retire_at_age)%>%
     group_by(ref_date, sex)%>%
-    summarize(`population based estimate`=sum(`population based estimate`))
+    summarize(`population based estimate`=sum(`population based estimate`))%>%
+  pivot_wider(id_cols = ref_date, names_from = sex, values_from = `population based estimate`)%>%
+  mutate(`Both Sexes`=Males+Females)%>%
+  pivot_longer(cols=-ref_date, names_to = "sex", values_to = "population based estimate")%>%
+  mutate(`population based estimate`=round(`population based estimate`))  
 
 reported <- reported%>%
   select(ref_date,`reported retirements`=val_norm, sex)%>%
-  mutate(ref_date=as.numeric(ref_date))
-
+  mutate(ref_date=as.numeric(ref_date))%>%
+  pivot_wider(id_cols = ref_date, names_from = sex, values_from = `reported retirements`)%>%
+  mutate(`Both Sexes`=Males+Females)%>%
+  pivot_longer(cols=-ref_date,names_to = "sex", values_to = "reported retirements")
 full_join(estimated, reported)%>%
   pivot_longer(cols=c("population based estimate","reported retirements"), names_to = "name", values_to = "value")
 })
@@ -257,40 +286,33 @@ plotly::ggplotly(plt, tooltip = "text")%>%
 Column {.tabset}
 --------------------------------------
 
-### Plots 
+### Both Sexes
 
 ```{r}
-plotly::renderPlotly({
-plt <- ggplot(both(), aes(ref_date, 
-                          value, 
-                          colour=name,
-                          group=sex,
-                          text=paste(
-                            "The",
-                            name,
-                            "\n in",
-                            ref_date,
-                            "is",
-                            scales::comma(value, accuracy=1))))+
-  geom_line()+
-  scale_y_continuous(labels=scales::comma, limits = c(0,40000))+
-  labs(title="Reported vs. Estimated retirements",
-    colour="",
-    x="",
-    y="")+
-  facet_wrap(~sex)+
-  theme(legend.position = "bottom")+
-      scale_colour_brewer(palette = "Dark2")
-
- plotly::ggplotly(plt, tooltip = "text")  %>%
-  layout(legend = list(
+  plotly::renderPlotly({
+  plt <- compare_plot(filter(both(), sex=="Both Sexes"), 80000)
+  plotly::ggplotly(plt, tooltip = "text")  %>%
+    layout(legend = list(
       orientation = "h"
     )
   )%>% config(displayModeBar = F)
 })
 ```
 
-### Data
+### By Sex
+
+```{r}
+ plotly::renderPlotly({
+  plt <- compare_plot(filter(both(), sex!="Both Sexes"), 40000)
+  plotly::ggplotly(plt, tooltip = "text")  %>%
+    layout(legend = list(
+      orientation = "h"
+    )
+  )%>% config(displayModeBar = F)
+})
+```
+
+### Download the data
 
 ```{r}
 DT::renderDataTable(server = FALSE, {
