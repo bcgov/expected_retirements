@@ -3,6 +3,7 @@ title: "Expected Retirement"
 output:
   flexdashboard::flex_dashboard:
     source_code: https://github.com/bcgov/expected_retirements
+    css: style.css
 runtime: shiny
 resource_files:
 - processed_data/bc_pop.rds
@@ -61,15 +62,15 @@ knitr::kable(t(tbbl))%>%
   kableExtra::kable_styling(full_width = F)
 ```
 
--   The expected number of female retirements in a year is $\sum^{a=60}_{a=55}p_a \times w_{af}=32,000$ where $p_a$ is the probability of retirement at age $a$ and $w_{af}$ is the number of female workers of age $a$.
+-   The expected number of female retirements in a year is $\sum^{a=60}_{a=55}p_a \times w_{af}=32,000$.
 
-The age pyramid {data-orientation=rows}
+Inputs {data-orientation=rows}
 =====================================     
    
 Row {data-height=900}
 -------------------------------------
 
-### The age pyramid illustrates the number of people of each age/sex combination in B.C. Horizontal grey lines indicate the years where retirement risk is positive.
+### The age pyramid illustrates the number of people of each age/sex combination in B.C. Horizontal grey lines indicate the retirement years.
 
 ```{r}
 plotly::renderPlotly({
@@ -95,30 +96,20 @@ plotly::renderPlotly({
        x="",
        y="Age")
   plotly::ggplotly(age_pyramid, tooltip = "text")%>%
-    plotly::animation_opts(transition = 0)
-})
+    plotly::animation_opts(transition = 0)%>%
+  config(displayModeBar = F)
+})%>%
+  bindCache("pyramid")
 ```
-
-Row {data-height=100}
--------------------------------------
-
-###
-
--   Historical data from Statistics Canada table 17-10-0005-01 and projections from https://bcstats.shinyapps.io/popApp/
-
-Labour Force Participation Rates {data-orientation=rows}
-=====================================     
-   
-Row {data-height=900}
--------------------------------------
 
 ### The Labour Force Participation Rates give the proportion of the population that is at risk of retirement.
 
 ```{r}
+plotly::renderPlotly({
 plt <- ggplot(participation,aes(Date,
                                 `Participation Rate`,
-                                colour=Sex,
-                                group=Sex,
+                                colour=fct_rev(Sex),
+                                group=fct_rev(Sex),
                                 text=paste(
                                 "The labour force participation rate for \n",
                                 str_to_lower(Sex),
@@ -129,18 +120,26 @@ plt <- ggplot(participation,aes(Date,
                                 )))+
   geom_line(alpha=.25,lwd=.25)+
   geom_smooth(se=FALSE, lwd=.5)+
-  labs(title="Labour Force Participation Rate: ages 50-54")
-plotly::ggplotly(plt, tooltip = "text")
+  labs(title="Labour Force Participation Rate: ages 50-54")+
+  guides(colour = guide_legend(reverse=TRUE))
+plotly::ggplotly(plt, tooltip = "text")%>%
+  config(displayModeBar = F)
+})%>%
+  bindCache("participation")
 ```
 
 Row {data-height=100}
 -------------------------------------
 
 ###
+- <span class='bigger'>&uarr;</span> Hit the play button to see the population size change over time.
+-   Historical data from Statistics Canada table 17-10-0005-01 and projections from https://bcstats.shinyapps.io/popApp/
+
+###
 
 -   Historical data from Statistics Canada table 14-10-0017-01.
 
-The app {data-orientation=columns}
+Output {data-orientation=columns}
 =====================================  
 
 Inputs {.sidebar}
@@ -148,6 +147,13 @@ Inputs {.sidebar}
 
 
 ```{r}
+
+HTML("<br>")
+
+actionButton("reset", "Reset sliders")
+
+HTML("<br>")
+
 sliderInput("male_part_rate", "Male 50-54 labour force participation rate?",
                   min = .5, max = 1,
                   value = .9)
@@ -169,6 +175,16 @@ sliderInput("hazard_65", "Hazard rate at age 65?",
 sliderInput("hazard_66_70", "Hazard rate age 66-70?",
                   min = 0, max = 1,
                   value = .15)
+observeEvent(input$reset, {
+  updateSliderInput(inputId = "male_part_rate", value = .9)
+  updateSliderInput(inputId = "female_part_rate", value = .8)
+  updateSliderInput(inputId = "hazard_55_57", value = .02)
+  updateSliderInput(inputId = "hazard_58_60", value = .05)
+  updateSliderInput(inputId = "hazard_61_64", value = .15)
+  updateSliderInput(inputId = "hazard_65", value = .22)
+  updateSliderInput(inputId = "hazard_66_70", value = .15)
+})
+
 ```
 
 ```{r}
@@ -233,7 +249,8 @@ plt <- ggplot(retire_distribution(), aes(x=factor(age),
   labs(title="Resulting distribution of retirement age",
     x="Age",
        y="Retire at age")
-plotly::ggplotly(plt, tooltip = "text")
+plotly::ggplotly(plt, tooltip = "text")%>% 
+  config(displayModeBar = F)
 })
 ```
 
@@ -262,13 +279,14 @@ plt <- ggplot(both(), aes(ref_date,
     x="",
     y="")+
   facet_wrap(~sex)+
-  theme(legend.position = "bottom")
+  theme(legend.position = "bottom")+
+      scale_colour_brewer(palette = "Dark2")
 
  plotly::ggplotly(plt, tooltip = "text")  %>%
   layout(legend = list(
       orientation = "h"
     )
-  )
+  )%>% config(displayModeBar = F)
 })
 ```
 
@@ -306,6 +324,6 @@ DT::renderDataTable(server = FALSE, {
 ::: {#refs}
 :::
 
-# Appendix
+### Appendix
 
-![Estimate hazard rates from[@johnson2008]](background/hazard.png)
+![](background/hazard.png)
