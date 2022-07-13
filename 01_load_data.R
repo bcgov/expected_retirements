@@ -15,7 +15,7 @@ bc_pop <- cansim::get_cansim("17-10-0005-01") %>%
     ref_date = as.numeric(ref_date)
   ) %>%
   select(ref_date, value, age_group, sex)
-
+#population projections need to be manually downloaded :( from https://bcstats.shinyapps.io/popApp/ ---------
 projections <- read_csv(here::here("raw_data", "Population_Projections.csv")) %>%
   select(-Region, -`Regional District`, -Total) %>%
   pivot_longer(cols = c(-"Year", -"Gender"), names_to = "age_group", values_to = "value") %>%
