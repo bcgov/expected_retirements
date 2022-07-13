@@ -249,9 +249,9 @@ reported <- reported%>%
   mutate(ref_date=as.numeric(ref_date))%>%
   pivot_wider(id_cols = ref_date, names_from = sex, values_from = `reported retirements`)%>%
   mutate(`Both Sexes`=Males+Females)%>%
-  pivot_longer(cols=-ref_date,names_to = "sex", values_to = "reported retirements")
+  pivot_longer(cols=-ref_date,names_to = "sex", values_to = "reported retirements: Statistics Canada table 14-10-0126-01")
 full_join(estimated, reported)%>%
-  pivot_longer(cols=c("population based estimate","reported retirements"), names_to = "name", values_to = "value")
+  pivot_longer(cols=c("population based estimate","reported retirements: Statistics Canada table 14-10-0126-01"), names_to = "name", values_to = "value")
 })
 
 ```
