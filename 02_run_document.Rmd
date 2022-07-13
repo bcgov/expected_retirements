@@ -48,44 +48,41 @@ compare_plot <- function(tbbl, ylim){
 Introduction
 =====================================  
 
--   This app predicts British Columbia "retirement" numbers based on demographic data and projections. 
+-   This app predicts British Columbia "retirement" numbers based on demographic data, both observed and predicted. 
 -   The definition of retirement is broad: permanent exit from the labour market, whether above or below ground.
--   The main driver of retirements is the number $n_{as}$ of individuals of each age/sex combination.
+-   The main driver of retirements is the number of individuals of each age/sex combination.
 -   For the app the user specifies:
-    1)  the labour force participation rate $r_s$ which determines the number of workers at risk of retirement: $w_{as}=n_{as} \times r_s$.
-    2)  the hazard rate $h_a$ for various age groups between 55 and 70: the annual risk of becoming retired given you have not yet retired.
--   The hazard rates can be used to determine the probability distribution for retirement ages: $p_a$ (simple example below)
-
-#### Assumptions
-
--   Demographic data (historic and forecasts) are accurate.
--   All retirements occur between the ages of 55 and 71.
--   Labour force participation rates for those approaching retirement will stay around .9 for males and .8 for females. 
--   The annual risk of retirement is similar to those in the USA in the early 2000's [@johnson2008].
+    1)  the labour force participation rate, determining the approximate number of labour force participants at risk of retirement.
+    2)  hazard rates for retirement, which is the probability of retirement in the current year, conditional on "survival" i.e. you have not previously retired.
+-   The expected number of retirements in a year depends on the joint probability distribution: the probability of survival AND retirement at this age.
+-   The joint probability is the product of the hazard rate with the probability of survival.
+-   For each age group, the expected number of retirements in a year is the product of the joint probability and the number of labour force participants at risk of retirement. 
+-   The *total* expected retirements is the sum of each age's expected retirements. 
 
 #### A simple example
 
 -   Suppose that demographics are unchanging: there are 40,000 females of each age in B.C.
--   Further, suppose that the labour force participation rate is $r_f=.8$ for females approaching retirement age.
+-   Further, suppose that the labour force participation rate is $.8$ for females approaching retirement age.
 -   This implies 32,000 females of each age are at risk of retirement.
--   Suppose the risk of retirement is $h_a=0$ for those age 0-54 and $h_a=.5$ for those age 55-59.
--   i.e. assuming you have not retired yet and you are between 55 and 59 years old there is a 50/50 chance that you will retire this year.
--   At age 60 all remaining workers retire.
+-   Suppose the hazard rate is $.5$ for those age 55-59. i.e. conditional on not having retired yet, there is a 50/50 chance of retiring this year.
+-   Assume that the hazard rate is $0$ for those age 0-54 and at age 60 all remaining workers retire i.e. hazard rate of 1.
+
 
 ```{r}
-tbbl <- tibble(age=55:60, 
+tbbl <- tibble(Age=55:60, 
                population=rep(40000,6),
-               `at risk for retirement: $w_{af}=.8 \\times 40,000$`=rep(32000,6),
-              `not yet retired (at start of year)`=c(32000*c(.5^(0:5))),
-               `retirements (50% of not yet retired)`=c(32000*c(.5^(1:5),1-sum(.5^(1:5)))))%>%
-  mutate(`probability of retirement: $p_a$`=`retirements (50% of not yet retired)`/32000)%>%
-  mutate_all(scales::comma)
+              `at risk for retirement`=rep(32000,6),
+              `hazard rate`=c(rep(.5,5),1),
+              `probability of survival`=.5^(0:5))%>%
+   mutate(`joint probability`=`hazard rate`*`probability of survival`,
+          `retirements this year`=`at risk for retirement`*`joint probability`)%>%
+   mutate_all(scales::comma)
+  
 knitr::kable(t(tbbl))%>%
   kableExtra::kable_styling(full_width = F)
 ```
 
--   The expected number of retirements is a weighted average: $\sum^{a=60}_{a=55}p_a \times w_{af}=32,000$.
-
+-   So in this example the annual total expected retirements is $32,000$.
 
 Inputs {data-orientation=rows}
 =====================================     
@@ -98,7 +95,7 @@ Row {data-height=900}
 ```{r}
 plotly::renderPlotly({
   age_pyramid <- ggplot()+
-  geom_hline(data=retire_distribution(), aes(yintercept = age), alpha=.25, colour="gray60", lwd=2)+
+  geom_hline(data=retire_distribution(), aes(yintercept = Age), alpha=.25, colour="gray60", lwd=2)+
   geom_point(data = bc_pop, 
        mapping = aes(x = ifelse(sex == "Males", -value, value), 
                      y = age_group, 
@@ -191,7 +188,7 @@ sliderInput("hazard_58_60", "Hazard rate age 58-60?",
                   value = .05)
 sliderInput("hazard_61_64", "Hazard rate age 61-64?",
                   min = 0, max = 1,
-                  value = .15)
+                  value = .17)
 sliderInput("hazard_65", "Hazard rate at age 65?",
                   min = 0, max = 1,
                   value = .22)
@@ -212,18 +209,18 @@ observeEvent(input$reset, {
 
 ```{r}
 retire_distribution <- reactive({
-  age <-55:71
-  hazard_rate <- c(rep(input$hazard_55_57, 3),
+  Age <-55:71
+  `Hazard Rate` <- c(rep(input$hazard_55_57, 3),
                    rep(input$hazard_58_60, 3),
                    rep(input$hazard_61_64, 4),
                    input$hazard_65, 
                    rep(input$hazard_66_70,5), 
                    hazard_final)
-   tbbl <- tibble(age, hazard_rate)%>%
-    mutate(still_working_at_start=lag(cumprod(1-hazard_rate)))
- tbbl$still_working_at_start[1] <- 1
+   tbbl <- tibble(Age, `Hazard Rate`)%>%
+    mutate(`Probability of Survival`=lag(cumprod(1-`Hazard Rate`)))
+ tbbl$`Probability of Survival`[1] <- 1
  tbbl <-tbbl%>%
-   mutate(retire_at_age=hazard_rate*still_working_at_start)
+   mutate(`Joint Probability`=`Hazard Rate`*`Probability of Survival`)
 })
 
 both <- reactive({
@@ -236,10 +233,10 @@ both <- reactive({
     select(-value)
 
   weights <-retire_distribution()%>%
-    select(age_group=age, retire_at_age)
+    select(age_group=Age, `Joint Probability`)
 
   estimated <- full_join(estimated, weights)%>%
-    mutate(`population based estimate`=`population based estimate`*retire_at_age)%>%
+    mutate(`population based estimate`=`population based estimate`*`Joint Probability`)%>%
     group_by(ref_date, sex)%>%
     summarize(`population based estimate`=sum(`population based estimate`))%>%
   pivot_wider(id_cols = ref_date, names_from = sex, values_from = `population based estimate`)%>%
@@ -259,27 +256,55 @@ full_join(estimated, reported)%>%
 
 ```
 
-Column
+Column {.tabset}
 --------------------------------------
 
-### 
+### Plot
 
 ```{r}
 plotly::renderPlotly({
-plt <- ggplot(retire_distribution(), aes(x=factor(age),
-                                         y=retire_at_age,
+plt <- ggplot(retire_distribution(), aes(x=factor(Age),
+                                         y=`Joint Probability`,
                                          text=paste(
-                                          scales::percent(retire_at_age,accuracy=.01), 
+                                          scales::percent(`Joint Probability`,accuracy=.01), 
                                          "of people retire at",
-                                         age
+                                         Age
                                          )))+
   geom_col()+
   scale_y_continuous(label=scales::percent, limits=c(0,1))+
-  labs(title="Resulting distribution of retirement age",
+  labs(title="Joint probability distribution of retirement age",
     x="Age",
-       y="Retire at age")
+       y="")
 plotly::ggplotly(plt, tooltip = "text")%>% 
   config(displayModeBar = F)
+})
+```
+
+### Table
+
+```{r}
+DT::renderDataTable(server = FALSE, {
+  retire_distribution()%>%
+    mutate(across(!Age, scales::comma, accuracy=.0001))%>%
+    DT::datatable(
+      extensions = "Buttons",
+      rownames = FALSE,
+      options = list(
+        columnDefs = list(list(className = "dt-center", targets = "_all")),
+        paging = TRUE,
+        scrollX = TRUE,
+        scrollY = TRUE,
+        searching = TRUE,
+        ordering = TRUE,
+        dom = "Btip",
+        buttons = list(
+          list(extend = "csv", filename = input$name),
+          list(extend = "excel", filename = input$name)
+        ),
+        pageLength = 10,
+        lengthMenu = c(3, 5)
+      )
+    )
 })
 ```
 
@@ -312,11 +337,11 @@ Column {.tabset}
 })
 ```
 
-### Download the data
+### Table
 
 ```{r}
 DT::renderDataTable(server = FALSE, {
-   both() %>%
+   both() %>%  
     DT::datatable(
       extensions = "Buttons",
       rownames = FALSE,
@@ -341,11 +366,27 @@ DT::renderDataTable(server = FALSE, {
 
 
 
-# References
+# Assumptions/References/Appendix {data-orientation=rows}
+
+Row {data-height=200}
+-------------------------------------
+
+### Assumptions
+
+-   Demographic data (historic and forecasts) are accurate.
+-   All retirements occur between the ages of 55 and 71.
+-   Labour force participation rates for those approaching retirement will stay around .9 for males and .8 for females. 
+-   Hazard rates are similar to those in the USA in the early 2000's [@johnson2008].
+
+Row {data-height=100}
+-------------------------------------
+### References
 
 ::: {#refs}
 :::
 
+Row {data-height=900}
+-------------------------------------
 ### Appendix
 
 ![](background/hazard.png)
