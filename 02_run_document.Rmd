@@ -13,36 +13,44 @@ bibliography: references.yaml
 ---
 
 ```{r}
+#libraries-----------
 library(tidyverse)
 library(plotly)
+#constants--------------
 hazard_final <- 1
-bc_pop <- read_rds(here::here("processed_data","bc_pop.rds"))%>%
-  mutate(ref_date=as.numeric(ref_date))%>%
-  filter(age_group<72)
+#read files--------------
+bc_pop <- read_rds(here::here("processed_data", "bc_pop.rds")) %>%
+  mutate(ref_date = as.numeric(ref_date)) %>%
+  filter(age_group < 72)
 reported <- read_rds(here::here("processed_data", "retirements.rds"))
 participation <- read_rds(here::here("processed_data", "participation.rds"))
-compare_plot <- function(tbbl, ylim){
-    ggplot(tbbl, aes(ref_date, 
-                          value, 
-                          colour=name,
-                          group=sex,
-                          text=paste(
-                            "The",
-                            name,
-                            "\n in",
-                            ref_date,
-                            "is",
-                            scales::comma(value, accuracy=1))))+
-  geom_line()+
-  scale_y_continuous(labels=scales::comma, limits = c(0,ylim))+
-  labs(title="Reported vs. Estimated retirements",
-    colour="",
-    x="",
-    y="")+
-  facet_wrap(~sex)+
-  theme(legend.position = "bottom")+
-      scale_colour_brewer(palette = "Dark2")
- }
+#functions--------------------
+compare_plot <- function(tbbl, ylim) {
+  ggplot(tbbl, aes(ref_date,
+    value,
+    colour = name,
+    group = sex,
+    text = paste(
+      "The",
+      name,
+      "\n in",
+      ref_date,
+      "is",
+      scales::comma(value, accuracy = 1)
+    )
+  )) +
+    geom_line() +
+    scale_y_continuous(labels = scales::comma, limits = c(0, ylim)) +
+    labs(
+      title = "Reported vs. Estimated retirements",
+      colour = "",
+      x = "",
+      y = ""
+    ) +
+    facet_wrap(~sex) +
+    theme(legend.position = "bottom") +
+    scale_colour_brewer(palette = "Dark2")
+}
 ```
 
 Introduction
@@ -69,16 +77,20 @@ Introduction
 
 
 ```{r}
-tbbl <- tibble(Age=55:60, 
-               population=rep(40000,6),
-              `at risk for retirement`=rep(32000,6),
-              `hazard rate`=c(rep(.5,5),1),
-              `probability of survival`=.5^(0:5))%>%
-   mutate(`joint probability`=`hazard rate`*`probability of survival`,
-          `retirements this year`=`at risk for retirement`*`joint probability`)%>%
-   mutate_all(scales::comma)
-  
-knitr::kable(t(tbbl))%>%
+tbbl <- tibble(
+  Age = 55:60,
+  population = rep(40000, 6),
+  `at risk for retirement` = rep(32000, 6),
+  `hazard rate` = c(rep(.5, 5), 1),
+  `probability of survival` = .5^(0:5)
+) %>%
+  mutate(
+    `joint probability` = `hazard rate` * `probability of survival`,
+    `retirements this year` = `at risk for retirement` * `joint probability`
+  ) %>%
+  mutate_all(scales::comma)
+
+knitr::kable(t(tbbl)) %>%
   kableExtra::kable_styling(full_width = F)
 ```
 
@@ -94,31 +106,37 @@ Row {data-height=900}
 
 ```{r}
 plotly::renderPlotly({
-  age_pyramid <- ggplot()+
-  geom_hline(data=retire_distribution(), aes(yintercept = Age), alpha=.25, colour="gray60", lwd=2)+
-  geom_point(data = bc_pop, 
-       mapping = aes(x = ifelse(sex == "Males", -value, value), 
-                     y = age_group, 
-                     fill = sex, 
-                     frame=ref_date,
-                     text=paste(
-                       "In",
-                       ref_date,
-                       "the number of",
-                       sex,
-                       "of age",
-                       age_group, 
-                       if_else(ref_date<2022,"was","is expected to be"),
-                       scales::comma(value)
-                     )))+
-  lemon::scale_x_symmetric(labels = abs) +
-  labs(title = "B.C. Population by age, sex and year",
-       x="",
-       y="Age")
-  plotly::ggplotly(age_pyramid, tooltip = "text")%>%
-    plotly::animation_opts(transition = 0)%>%
-  config(displayModeBar = F)
-})%>%
+  age_pyramid <- ggplot(data = bc_pop) +
+    #retire_distribution() which is defined line 236ish just gives us the ages of retirement.
+    geom_hline(data = retire_distribution(), aes(yintercept = Age), alpha = .25, colour = "gray60", lwd = 2) +
+    geom_point(
+      mapping = aes(
+        x = ifelse(sex == "Males", -value, value),
+        y = age_group,
+        fill = sex,
+        frame = ref_date,
+        text = paste(
+          "In",
+          ref_date,
+          "the number of",
+          sex,
+          "of age",
+          age_group,
+          if_else(ref_date < 2022, "was", "is expected to be"),
+          scales::comma(value)
+        )
+      )
+    ) +
+    lemon::scale_x_symmetric(labels = abs) +
+    labs(
+      title = "B.C. Population by age, sex and year",
+      x = "",
+      y = "Age"
+    )
+  plotly::ggplotly(age_pyramid, tooltip = "text") %>%
+    plotly::animation_opts(transition = 0) %>%
+    config(displayModeBar = F)
+}) %>%
   bindCache("pyramid")
 ```
 
@@ -126,25 +144,25 @@ plotly::renderPlotly({
 
 ```{r}
 plotly::renderPlotly({
-plt <- ggplot(participation,aes(Date,
-                                `Participation Rate`,
-                                colour=fct_rev(Sex),
-                                group=fct_rev(Sex),
-                                text=paste(
-                                "The labour force participation rate for \n",
-                                str_to_lower(Sex),
-                                "in",
-                                tsibble::yearmonth(Date),
-                                "was",
-                                `Participation Rate`
-                                )))+
-  geom_line(alpha=.25,lwd=.25)+
-  geom_smooth(se=FALSE, lwd=.5)+
-  labs(title="Labour Force Participation Rate: ages 50-54")+
-  guides(colour = guide_legend(reverse=TRUE))
-plotly::ggplotly(plt, tooltip = "text")%>%
-  config(displayModeBar = F)
-})%>%
+  plt <- ggplot(participation, aes(Date,
+    `Participation Rate`,
+    colour = fct_rev(Sex),
+    group = fct_rev(Sex),
+    text = paste(
+      "The labour force participation rate for \n",
+      str_to_lower(Sex),
+      "in",
+      tsibble::yearmonth(Date),
+      "was",
+      `Participation Rate`
+    )
+  )) +
+    geom_line(alpha = .25, lwd = .25) +
+    geom_smooth(se = FALSE, lwd = .5) +
+    labs(title = "Labour Force Participation Rate: ages 50-54")
+  plotly::ggplotly(plt, tooltip = "text") %>%
+    config(displayModeBar = F)
+}) %>%
   bindCache("participation")
 ```
 
@@ -175,26 +193,33 @@ actionButton("reset", "Reset sliders")
 HTML("<br>")
 
 sliderInput("male_part_rate", "Male 50-54 labour force participation rate?",
-                  min = .5, max = 1,
-                  value = .9)
+  min = .5, max = 1,
+  value = .9
+)
 sliderInput("female_part_rate", "Female 50-54 labour force participation rate?",
-                  min = .5, max = 1,
-                  value = .8)
+  min = .5, max = 1,
+  value = .8
+)
 sliderInput("hazard_55_57", "Hazard rate age 55-57?",
-                  min = 0, max = 1,
-                  value = .02)
+  min = 0, max = 1,
+  value = .02
+)
 sliderInput("hazard_58_60", "Hazard rate age 58-60?",
-                  min = 0, max = 1,
-                  value = .05)
+  min = 0, max = 1,
+  value = .05
+)
 sliderInput("hazard_61_64", "Hazard rate age 61-64?",
-                  min = 0, max = 1,
-                  value = .17)
+  min = 0, max = 1,
+  value = .17
+)
 sliderInput("hazard_65", "Hazard rate at age 65?",
-                  min = 0, max = 1,
-                  value = .22)
+  min = 0, max = 1,
+  value = .22
+)
 sliderInput("hazard_66_70", "Hazard rate age 66-70?",
-                  min = 0, max = 1,
-                  value = .15)
+  min = 0, max = 1,
+  value = .15
+)
 observeEvent(input$reset, {
   updateSliderInput(inputId = "male_part_rate", value = .9)
   updateSliderInput(inputId = "female_part_rate", value = .8)
@@ -204,56 +229,58 @@ observeEvent(input$reset, {
   updateSliderInput(inputId = "hazard_65", value = .22)
   updateSliderInput(inputId = "hazard_66_70", value = .15)
 })
-
 ```
 
 ```{r}
 retire_distribution <- reactive({
-  Age <-55:71
-  `Hazard Rate` <- c(rep(input$hazard_55_57, 3),
-                   rep(input$hazard_58_60, 3),
-                   rep(input$hazard_61_64, 4),
-                   input$hazard_65, 
-                   rep(input$hazard_66_70,5), 
-                   hazard_final)
-   tbbl <- tibble(Age, `Hazard Rate`)%>%
-    mutate(`Probability of Survival`=lag(cumprod(1-`Hazard Rate`)))
- tbbl$`Probability of Survival`[1] <- 1
- tbbl <-tbbl%>%
-   mutate(`Joint Probability`=`Hazard Rate`*`Probability of Survival`)
+  Age <- 55:71
+  `Hazard Rate` <- c(
+    rep(input$hazard_55_57, 3),
+    rep(input$hazard_58_60, 3),
+    rep(input$hazard_61_64, 4),
+    input$hazard_65,
+    rep(input$hazard_66_70, 5),
+    hazard_final
+  )
+  tbbl <- tibble(Age, `Hazard Rate`) %>%
+    mutate(`Probability of Survival` = lag(cumprod(1 - `Hazard Rate`)))
+  tbbl$`Probability of Survival`[1] <- 1
+  tbbl <- tbbl %>%
+    mutate(`Joint Probability` = `Hazard Rate` * `Probability of Survival`)
 })
 
 both <- reactive({
-  estimated <- bc_pop%>%
-  filter(age_group %in% 55:71)%>%
-    group_by(ref_date, sex)%>%
-    mutate(`population based estimate` = if_else(sex=="Males",
-                                      value*input$male_part_rate,
-                                      value*input$female_part_rate))%>%
+  estimated <- bc_pop %>%
+    filter(age_group %in% 55:71) %>%
+    group_by(ref_date, sex) %>%
+    mutate(`population based estimate` = if_else(sex == "Males",
+      value * input$male_part_rate,
+      value * input$female_part_rate
+    )) %>%
     select(-value)
 
-  weights <-retire_distribution()%>%
-    select(age_group=Age, `Joint Probability`)
+  weights <- retire_distribution() %>%
+    select(age_group = Age, `Joint Probability`)
 
-  estimated <- full_join(estimated, weights)%>%
-    mutate(`population based estimate`=`population based estimate`*`Joint Probability`)%>%
-    group_by(ref_date, sex)%>%
-    summarize(`population based estimate`=sum(`population based estimate`))%>%
-  pivot_wider(id_cols = ref_date, names_from = sex, values_from = `population based estimate`)%>%
-  mutate(`Both Sexes`=Males+Females)%>%
-  pivot_longer(cols=-ref_date, names_to = "sex", values_to = "population based estimate")%>%
-  mutate(`population based estimate`=round(`population based estimate`))  
+  estimated <- full_join(estimated, weights) %>%
+    mutate(`population based estimate` = `population based estimate` * `Joint Probability`) %>%
+    group_by(ref_date, sex) %>%
+    summarize(`population based estimate` = sum(`population based estimate`)) %>%
+    pivot_wider(id_cols = ref_date, names_from = sex, values_from = `population based estimate`) %>%
+    mutate(`Both Sexes` = Males + Females) %>%
+    pivot_longer(cols = -ref_date, names_to = "sex", values_to = "population based estimate") %>%
+    mutate(`population based estimate` = round(`population based estimate`))
 
-reported <- reported%>%
-  select(ref_date,`reported retirements`=val_norm, sex)%>%
-  mutate(ref_date=as.numeric(ref_date))%>%
-  pivot_wider(id_cols = ref_date, names_from = sex, values_from = `reported retirements`)%>%
-  mutate(`Both Sexes`=Males+Females)%>%
-  pivot_longer(cols=-ref_date,names_to = "sex", values_to = "reported retirements: Statistics Canada table 14-10-0126-01")
-full_join(estimated, reported)%>%
-  pivot_longer(cols=c("population based estimate","reported retirements: Statistics Canada table 14-10-0126-01"), names_to = "name", values_to = "value")
+  reported <- reported %>%
+    select(ref_date, `reported retirements` = val_norm, sex) %>%
+    mutate(ref_date = as.numeric(ref_date)) %>%
+    pivot_wider(id_cols = ref_date, names_from = sex, values_from = `reported retirements`) %>%
+    mutate(`Both Sexes` = Males + Females) %>%
+    pivot_longer(cols = -ref_date, names_to = "sex", values_to = "reported retirements: Statistics Canada table 14-10-0126-01")
+  
+  full_join(estimated, reported) %>%
+    pivot_longer(cols = c("population based estimate", "reported retirements: Statistics Canada table 14-10-0126-01"), names_to = "name", values_to = "value")
 })
-
 ```
 
 Column {.tabset}
@@ -263,20 +290,24 @@ Column {.tabset}
 
 ```{r}
 plotly::renderPlotly({
-plt <- ggplot(retire_distribution(), aes(x=factor(Age),
-                                         y=`Joint Probability`,
-                                         text=paste(
-                                          scales::percent(`Joint Probability`,accuracy=.01), 
-                                         "of people retire at",
-                                         Age
-                                         )))+
-  geom_col()+
-  scale_y_continuous(label=scales::percent, limits=c(0,1))+
-  labs(title="Joint probability distribution of retirement age",
-    x="Age",
-       y="")
-plotly::ggplotly(plt, tooltip = "text")%>% 
-  config(displayModeBar = F)
+  plt <- ggplot(retire_distribution(), aes(
+    x = factor(Age),
+    y = `Joint Probability`,
+    text = paste(
+      scales::percent(`Joint Probability`, accuracy = .01),
+      "of people retire at",
+      Age
+    )
+  )) +
+    geom_col() +
+    scale_y_continuous(label = scales::percent, limits = c(0, 1)) +
+    labs(
+      title = "Joint probability distribution of retirement age",
+      x = "Age",
+      y = ""
+    )
+  plotly::ggplotly(plt, tooltip = "text") %>%
+    config(displayModeBar = F)
 })
 ```
 
@@ -284,8 +315,8 @@ plotly::ggplotly(plt, tooltip = "text")%>%
 
 ```{r}
 DT::renderDataTable(server = FALSE, {
-  retire_distribution()%>%
-    mutate(across(!Age, scales::comma, accuracy=.0001))%>%
+  retire_distribution() %>%
+    mutate(across(!Age, scales::comma, accuracy = .0001)) %>%
     DT::datatable(
       extensions = "Buttons",
       rownames = FALSE,
@@ -314,26 +345,26 @@ Column {.tabset}
 ### Both Sexes
 
 ```{r}
-  plotly::renderPlotly({
-  plt <- compare_plot(filter(both(), sex=="Both Sexes"), 80000)
-  plotly::ggplotly(plt, tooltip = "text")  %>%
+plotly::renderPlotly({
+  plt <- compare_plot(filter(both(), sex == "Both Sexes"), 80000)
+  plotly::ggplotly(plt, tooltip = "text") %>%
     layout(legend = list(
       orientation = "h"
-    )
-  )%>% config(displayModeBar = F)
+    )) %>%
+    config(displayModeBar = F)
 })
 ```
 
 ### By Sex
 
 ```{r}
- plotly::renderPlotly({
-  plt <- compare_plot(filter(both(), sex!="Both Sexes"), 40000)
-  plotly::ggplotly(plt, tooltip = "text")  %>%
+plotly::renderPlotly({
+  plt <- compare_plot(filter(both(), sex != "Both Sexes"), 40000)
+  plotly::ggplotly(plt, tooltip = "text") %>%
     layout(legend = list(
       orientation = "h"
-    )
-  )%>% config(displayModeBar = F)
+    )) %>%
+    config(displayModeBar = F)
 })
 ```
 
@@ -341,7 +372,7 @@ Column {.tabset}
 
 ```{r}
 DT::renderDataTable(server = FALSE, {
-   both() %>%  
+  both() %>%
     DT::datatable(
       extensions = "Buttons",
       rownames = FALSE,
