@@ -198,6 +198,7 @@ HTML("<br>")
 actionButton("reset", "Reset sliders")
 
 HTML("<br>")
+HTML("<br>")
 
 sliderInput("hazard_55_57", "Hazard rate age 55-57?",
   min = 0, max = 1,
@@ -411,6 +412,6 @@ Row {data-height=100}
 
 Row {data-height=900}
 -------------------------------------
-### Appendix
+### Appendix: (added utilized hazard rates in red)
 
-![](background/hazard.png)
+![](background/overlay.png)
