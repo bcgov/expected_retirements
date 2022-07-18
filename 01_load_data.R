@@ -1,4 +1,5 @@
 library(tidyverse)
+library(fpp3)
 bc_pop <- cansim::get_cansim("17-10-0005-01") %>%
   janitor::clean_names() %>%
   filter(
@@ -57,7 +58,20 @@ participation <- cansim::get_cansim("14-10-0017-01") %>%
     sex != "Both sexes",
     age_group == "50 to 54 years"
   ) %>%
-  select(Date = ref_date, `Participation Rate` = val_norm, Sex = sex) %>%
-  mutate(Date = lubridate::ym(Date))
+  select(Date = ref_date, `Participation Rate` = val_norm, Sex = sex)%>%
+  mutate(Year=lubridate::year(lubridate::ym(Date)))%>%
+  group_by(Year, Sex)%>%
+  summarize(`Participation Rate`=mean(`Participation Rate`))%>%
+  ungroup()%>%
+  tsibble::as_tsibble(key=Sex, index=Year)
 
-write_rds(participation, here::here("processed_data", "participation.rds"))
+part_past_future <- participation %>%
+  model(ets_model = ETS(`Participation Rate`))%>%
+  forecast(h = "19 years")%>%
+  as_tibble()%>%
+  select(Year, Sex, `Participation Rate`=.mean)%>%
+  bind_rows(participation)
+
+write_rds(part_past_future, here::here("processed_data", "participation.rds"))
+
+

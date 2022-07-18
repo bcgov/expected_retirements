@@ -21,9 +21,16 @@ hazard_final <- 1
 # read files--------------
 bc_pop <- read_rds(here::here("processed_data", "bc_pop.rds")) %>%
   mutate(ref_date = as.numeric(ref_date)) %>%
-  filter(age_group < 72)
+  filter(age_group < 72,
+         ref_date>1975)
 reported <- read_rds(here::here("processed_data", "retirements.rds"))
 participation <- read_rds(here::here("processed_data", "participation.rds"))
+
+labour_force_participants <- full_join(bc_pop, participation, by=c("ref_date"="Year","sex"="Sex"))%>%
+  mutate(value=value*`Participation Rate`)%>%
+  select(-`Participation Rate`)
+
+
 # functions--------------------
 compare_plot <- function(tbbl, ylim) {
   ggplot(tbbl, aes(ref_date,
@@ -56,12 +63,11 @@ compare_plot <- function(tbbl, ylim) {
 Introduction
 =====================================  
 
--   This app predicts British Columbia "retirement" numbers based on demographic data, both observed and predicted. 
+-   This app predicts British Columbia "retirement" numbers based on demographic data and labour force participation rates, both observed and forecasted.
 -   The definition of retirement is broad: permanent exit from the labour market, whether above or below ground.
--   The main driver of retirements is the number of individuals of each age/sex combination.
--   For the app the user specifies:
-    1)  the labour force participation rate, determining the approximate number of labour force participants at risk of retirement.
-    2)  hazard rates for retirement, which is the probability of retirement in the current year, conditional on "survival" i.e. you have not previously retired.
+-   The main driver of retirements is the number of labour force participants at risk of retirement: the number of people of retirement age (55-71) who are/were labour force participants.
+-   This at risk population is estimated by multiplying the number of people between the ages of 55 and 71 by the labour force participation rate of those aged 50-54.
+-   For the app the user specifies hazard rates for retirement, which is the probability of retirement in the current year, conditional on "survival" i.e. you have not previously retired.
 -   The expected number of retirements in a year depends on the joint probability distribution: the probability of survival AND retirement at this age.
 -   The joint probability is the product of the hazard rate with the probability of survival.
 -   For each age group, the expected number of retirements in a year is the product of the joint probability and the number of labour force participants at risk of retirement. 
@@ -144,7 +150,7 @@ plotly::renderPlotly({
 
 ```{r}
 plotly::renderPlotly({
-  plt <- ggplot(participation, aes(Date,
+  plt <- ggplot(participation, aes(Year,
     `Participation Rate`,
     colour = fct_rev(Sex),
     group = fct_rev(Sex),
@@ -152,14 +158,15 @@ plotly::renderPlotly({
       "The labour force participation rate for \n",
       str_to_lower(Sex),
       "in",
-      tsibble::yearmonth(Date),
-      "was",
-      `Participation Rate`
+      Year,
+      if_else(Year>lubridate::year(lubridate::today()), "is forecast to be","was"),
+      scales::percent(`Participation Rate`, accuracy = .1)
     )
   )) +
-    geom_line(alpha = .25, lwd = .25) +
-    geom_smooth(se = FALSE, lwd = .5) +
-    labs(title = "Labour Force Participation Rate: ages 50-54")
+    geom_line() +
+    labs(colour="Sex",
+      title = "Labour Force Participation Rate: ages 50-54")+
+    scale_y_continuous(labels=scales::percent)
   plotly::ggplotly(plt, tooltip = "text") %>%
     config(displayModeBar = F)
 }) %>%
@@ -175,7 +182,7 @@ Row {data-height=100}
 
 ###
 
--   Historical data from Statistics Canada table 14-10-0017-01.
+-   Historical data from Statistics Canada table 14-10-0017-01 and forecasts via exponential smoothing. 
 
 Output {data-orientation=columns}
 =====================================  
@@ -192,14 +199,6 @@ actionButton("reset", "Reset sliders")
 
 HTML("<br>")
 
-sliderInput("male_part_rate", "Male 50-54 labour force participation rate?",
-  min = .5, max = 1,
-  value = .9
-)
-sliderInput("female_part_rate", "Female 50-54 labour force participation rate?",
-  min = .5, max = 1,
-  value = .8
-)
 sliderInput("hazard_55_57", "Hazard rate age 55-57?",
   min = 0, max = 1,
   value = .02
@@ -221,8 +220,6 @@ sliderInput("hazard_66_70", "Hazard rate age 66-70?",
   value = .15
 )
 observeEvent(input$reset, {
-  updateSliderInput(inputId = "male_part_rate", value = .9)
-  updateSliderInput(inputId = "female_part_rate", value = .8)
   updateSliderInput(inputId = "hazard_55_57", value = .02)
   updateSliderInput(inputId = "hazard_58_60", value = .05)
   updateSliderInput(inputId = "hazard_61_64", value = .15)
@@ -250,14 +247,10 @@ retire_distribution <- reactive({
 })
 
 both <- reactive({
-  estimated <- bc_pop %>%
+  estimated <- labour_force_participants %>%
     filter(age_group %in% 55:71) %>%
     group_by(ref_date, sex) %>%
-    mutate(`population based estimate` = if_else(sex == "Males",
-      value * input$male_part_rate,
-      value * input$female_part_rate
-    )) %>%
-    select(-value)
+    dplyr::rename(`population based estimate` = value)
 
   weights <- retire_distribution() %>%
     select(age_group = Age, `Joint Probability`)
@@ -405,8 +398,8 @@ Row {data-height=200}
 ### Assumptions
 
 -   Demographic data (historic and forecasts) are accurate.
+-   Labour force participation rate data (historic and forecasts) are accurate.
 -   All retirements occur between the ages of 55 and 71.
--   Labour force participation rates for those approaching retirement will stay around .9 for males and .8 for females. 
 -   Hazard rates are similar to those in the USA in the early 2000's [@johnson2008].
 
 Row {data-height=100}
