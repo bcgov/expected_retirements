@@ -39,7 +39,7 @@ compare_plot <- function(tbbl, ylim) {
     group = sex,
     text = paste(
       "The",
-      name,
+      word(name,1,sep = ":"),
       "\n in",
       ref_date,
       "is",
