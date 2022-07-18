@@ -49,7 +49,7 @@ retirements <- cansim::get_cansim("14-10-0126-01") %>%
 
 write_rds(retirements, here::here("processed_data", "retirements.rds"))
 
-participation <- cansim::get_cansim("14-10-0017-01")%>%
+participation <- cansim::get_cansim("14-10-0017-01") %>%
   janitor::clean_names() %>%
   filter(
     geo == "British Columbia",

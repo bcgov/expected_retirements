@@ -13,18 +13,18 @@ bibliography: references.yaml
 ---
 
 ```{r}
-#libraries-----------
+# libraries-----------
 library(tidyverse)
 library(plotly)
-#constants--------------
+# constants--------------
 hazard_final <- 1
-#read files--------------
+# read files--------------
 bc_pop <- read_rds(here::here("processed_data", "bc_pop.rds")) %>%
   mutate(ref_date = as.numeric(ref_date)) %>%
   filter(age_group < 72)
 reported <- read_rds(here::here("processed_data", "retirements.rds"))
 participation <- read_rds(here::here("processed_data", "participation.rds"))
-#functions--------------------
+# functions--------------------
 compare_plot <- function(tbbl, ylim) {
   ggplot(tbbl, aes(ref_date,
     value,
@@ -107,7 +107,7 @@ Row {data-height=900}
 ```{r}
 plotly::renderPlotly({
   age_pyramid <- ggplot(data = bc_pop) +
-    #retire_distribution() which is defined line 236ish just gives us the ages of retirement.
+    # retire_distribution() which is defined line 236ish just gives us the ages of retirement.
     geom_hline(data = retire_distribution(), aes(yintercept = Age), alpha = .25, colour = "gray60", lwd = 2) +
     geom_point(
       mapping = aes(
@@ -277,7 +277,7 @@ both <- reactive({
     pivot_wider(id_cols = ref_date, names_from = sex, values_from = `reported retirements`) %>%
     mutate(`Both Sexes` = Males + Females) %>%
     pivot_longer(cols = -ref_date, names_to = "sex", values_to = "reported retirements: Statistics Canada table 14-10-0126-01")
-  
+
   full_join(estimated, reported) %>%
     pivot_longer(cols = c("population based estimate", "reported retirements: Statistics Canada table 14-10-0126-01"), names_to = "name", values_to = "value")
 })
